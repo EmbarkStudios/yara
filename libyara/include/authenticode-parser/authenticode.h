@@ -201,6 +201,8 @@ AuthenticodeArray* authenticode_new(const uint8_t* data, int32_t len);
  */
 void authenticode_array_free(AuthenticodeArray* auth);
 
+int authenticode_digest2(const uint8_t* pe_data, size_t pe_len, uint8_t* digest, size_t size, size_t* len);
+
 #ifdef __cplusplus
 }
 #endif

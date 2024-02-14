@@ -612,3 +612,46 @@ void authenticode_array_free(AuthenticodeArray* arr)
         free(arr);
     }
 }
+
+int authenticode_digest2(const uint8_t* pe_data, size_t pe_len, uint8_t* digest, size_t size, size_t* len)
+{
+	const uint64_t dos_hdr_size = 0x40;
+	if (pe_len < dos_hdr_size)
+		return -1;
+
+	/* Check if it has DOS signature, so we don't parse random gibberish */
+	uint8_t dos_prefix[] = {0x4d, 0x5a};
+	if (memcmp(pe_data, dos_prefix, sizeof(dos_prefix)) != 0)
+		return -1;
+
+	/* offset to pointer in DOS header, that points to PE header */
+	const int pe_hdr_ptr_offset = 0x3c;
+	/* Read the PE offset */
+	uint32_t pe_offset = letoh32(*(uint32_t*)(pe_data + pe_hdr_ptr_offset));
+	/* Offset to Magic, to know the PE class (32/64bit) */
+	uint32_t magic_addr = pe_offset + 0x18;
+
+	if (pe_len < magic_addr + sizeof(uint16_t))
+		return -1;
+
+	/* Read the magic and check if we have 64bit PE */
+	uint16_t magic = letoh16(*(uint16_t*)(pe_data + magic_addr));
+	bool is_64bit = magic == 0x20b;
+
+	const EVP_MD* md = EVP_sha256();
+#if OPENSSL_VERSION_NUMBER >= 0x3000000fL
+	int mdlen = EVP_MD_get_size(md);
+#else
+	int mdlen = EVP_MD_size(md);
+#endif
+
+	if (size < mdlen)
+		return -1;
+
+	if (authenticode_digest(md, pe_data, pe_offset, is_64bit, pe_len, digest))
+		return -1;
+
+	*len = mdlen;
+	return 0;
+}
+
